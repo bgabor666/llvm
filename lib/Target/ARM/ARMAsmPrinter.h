@@ -15,6 +15,9 @@
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/Support/Compiler.h"
 
+#include "llvm/MC/MCObjectStreamer.h"
+#include "ARMBuildAttrs.h"
+
 namespace llvm {
 
 class MCOperand;
@@ -25,6 +28,160 @@ namespace ARM {
     DW_ISA_ARM_arm = 2
   };
 }
+
+// Per section and per symbol attributes are not supported.
+// To implement them we would need the ability to delay this emission
+// until the assembly file is fully parsed/generated as only then do we
+// know the symbol and section numbers.
+class AttributeEmitter {
+public:
+  virtual void MaybeSwitchVendor(StringRef Vendor) = 0;
+  virtual void EmitAttribute(unsigned Attribute, unsigned Value) = 0;
+  virtual void EmitTextAttribute(unsigned Attribute, StringRef String) = 0;
+  virtual void Finish() = 0;
+  virtual ~AttributeEmitter() {}
+};
+
+class AsmAttributeEmitter : public AttributeEmitter {
+  MCStreamer &Streamer;
+
+public:
+  AsmAttributeEmitter(MCStreamer &Streamer_) : Streamer(Streamer_) {}
+  void MaybeSwitchVendor(StringRef Vendor) { }
+
+  void EmitAttribute(unsigned Attribute, unsigned Value) {
+    Streamer.EmitRawText("\t.eabi_attribute " +
+                         Twine(Attribute) + ", " + Twine(Value));
+  }
+
+  void EmitTextAttribute(unsigned Attribute, StringRef String) {
+    switch (Attribute) {
+    default: llvm_unreachable("Unsupported Text attribute in ASM Mode");
+    case ARMBuildAttrs::CPU_name:
+      Streamer.EmitRawText(StringRef("\t.cpu ") + String.lower());
+      break;
+    /* GAS requires .fpu to be emitted regardless of EABI attribute */
+    case ARMBuildAttrs::Advanced_SIMD_arch:
+    case ARMBuildAttrs::VFP_arch:
+      Streamer.EmitRawText(StringRef("\t.fpu ") + String.lower());
+      break;
+    }
+  }
+  void Finish() { }
+};
+
+class ObjectAttributeEmitter : public AttributeEmitter {
+  // This structure holds all attributes, accounting for
+  // their string/numeric value, so we can later emmit them
+  // in declaration order, keeping all in the same vector
+  struct AttributeItemType {
+    enum {
+      HiddenAttribute = 0,
+      NumericAttribute,
+      TextAttribute
+    } Type;
+    unsigned Tag;
+    unsigned IntValue;
+    StringRef StringValue;
+  };
+
+  MCObjectStreamer &Streamer;
+  StringRef CurrentVendor;
+  SmallVector<AttributeItemType, 64> Contents;
+
+  // Account for the ULEB/String size of each item,
+  // not just the number of items
+  size_t ContentsSize;
+  // FIXME: this should be in a more generic place, but
+  // getULEBSize() is in MCAsmInfo and will be moved to MCDwarf
+  size_t getULEBSize(int Value) {
+    size_t Size = 0;
+    do {
+      Value >>= 7;
+      Size += sizeof(int8_t); // Is this really necessary?
+    } while (Value);
+    return Size;
+  }
+
+public:
+  ObjectAttributeEmitter(MCObjectStreamer &Streamer_) :
+    Streamer(Streamer_), CurrentVendor(""), ContentsSize(0) { }
+
+  void MaybeSwitchVendor(StringRef Vendor) {
+    assert(!Vendor.empty() && "Vendor cannot be empty.");
+
+    if (CurrentVendor.empty())
+      CurrentVendor = Vendor;
+    else if (CurrentVendor == Vendor)
+      return;
+    else
+      Finish();
+
+    CurrentVendor = Vendor;
+
+    assert(Contents.size() == 0);
+  }
+
+  void EmitAttribute(unsigned Attribute, unsigned Value) {
+    AttributeItemType attr = {
+      AttributeItemType::NumericAttribute,
+      Attribute,
+      Value,
+      StringRef("")
+    };
+    ContentsSize += getULEBSize(Attribute);
+    ContentsSize += getULEBSize(Value);
+    Contents.push_back(attr);
+  }
+
+  void EmitTextAttribute(unsigned Attribute, StringRef String) {
+    AttributeItemType attr = {
+      AttributeItemType::TextAttribute,
+      Attribute,
+      0,
+      String
+    };
+    ContentsSize += getULEBSize(Attribute);
+    // String + \0
+    ContentsSize += String.size()+1;
+
+    Contents.push_back(attr);
+  }
+
+  void Finish() {
+    // Vendor size + Vendor name + '\0'
+    const size_t VendorHeaderSize = 4 + CurrentVendor.size() + 1;
+
+    // Tag + Tag Size
+    const size_t TagHeaderSize = 1 + 4;
+
+    Streamer.EmitIntValue(VendorHeaderSize + TagHeaderSize + ContentsSize, 4);
+    Streamer.EmitBytes(CurrentVendor);
+    Streamer.EmitIntValue(0, 1); // '\0'
+
+    Streamer.EmitIntValue(ARMBuildAttrs::File, 1);
+    Streamer.EmitIntValue(TagHeaderSize + ContentsSize, 4);
+
+    // Size should have been accounted for already, now
+    // emit each field as its type (ULEB or String)
+    for (unsigned int i=0; i<Contents.size(); ++i) {
+      AttributeItemType item = Contents[i];
+      Streamer.EmitULEB128IntValue(item.Tag);
+      switch (item.Type) {
+      default: llvm_unreachable("Invalid attribute type");
+      case AttributeItemType::NumericAttribute:
+        Streamer.EmitULEB128IntValue(item.IntValue);
+        break;
+      case AttributeItemType::TextAttribute:
+        Streamer.EmitBytes(item.StringValue.upper());
+        Streamer.EmitIntValue(0, 1); // '\0'
+        break;
+      }
+    }
+
+    Contents.clear();
+  }
+};
 
 class LLVM_LIBRARY_VISIBILITY ARMAsmPrinter : public AsmPrinter {
 

@@ -38,6 +38,10 @@
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "ARMBuildAttrs.h"
+#include "ARMAsmPrinter.h"
+#include <map>
+
 using namespace llvm;
 
 namespace {
@@ -73,6 +77,10 @@ class ARMAsmParser : public MCTargetAsmParser {
 
   // Map of register aliases registers via the .req directive.
   StringMap<unsigned> RegisterReqs;
+
+  // Maps for ARM build attributes.
+  std::map<unsigned, unsigned> AttributeMap;
+  std::map<unsigned, StringRef> TextAttributeMap;
 
   struct {
     ARMCC::CondCodes Cond;    // Condition for IT block.
@@ -284,6 +292,7 @@ public:
                                SmallVectorImpl<MCParsedAsmOperand*> &Operands,
                                MCStreamer &Out, unsigned &ErrorInfo,
                                bool MatchingInlineAsm);
+  void finalizeParsing();
 };
 } // end anonymous namespace
 
@@ -7953,7 +7962,25 @@ bool ARMAsmParser::parseDirectiveArch(SMLoc L) {
 /// parseDirectiveEabiAttr
 ///  ::= .eabi_attribute int, int
 bool ARMAsmParser::parseDirectiveEabiAttr(SMLoc L) {
-  return true;
+  const AsmToken &Tok = Parser.getTok();
+  if (Tok.isNot(AsmToken::Integer))
+    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
+  unsigned attributeKey = Parser.getTok().getIntVal();
+  // Eat the key.
+  Parser.Lex();
+  if (Parser.getTok().isNot(AsmToken::Comma))
+    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
+  // Eat the comma.
+  Parser.Lex();
+  if (Parser.getTok().isNot(AsmToken::Integer))
+    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
+  AttributeMap[attributeKey] = Parser.getTok().getIntVal();
+  // Eat the value.
+  Parser.Lex();
+  if (Parser.getTok().isNot(AsmToken::EndOfStatement)) {
+    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
+  }
+  return false;
 }
 
 /// parseDirectiveFnStart
@@ -8173,6 +8200,28 @@ bool ARMAsmParser::parseDirectiveRegSave(SMLoc L, bool IsVector) {
 
   getTargetStreamer().emitRegSave(Op->getRegList(), IsVector);
   return false;
+}
+
+void ARMAsmParser::finalizeParsing() {
+  const MCSection *AttributeSection = reinterpret_cast<const MCSection*>(getParser().getContext().getELFSection(".ARM.attributes",
+                                                                                                                ELF::SHT_ARM_ATTRIBUTES,
+                                                                                                                0,
+                                                                                                                SectionKind::getMetadata()));
+  getParser().getStreamer().SwitchSection(AttributeSection);
+  getParser().getStreamer().EmitIntValue(ARMBuildAttrs::Format_Version, 1);
+
+  MCObjectStreamer &O = static_cast<MCObjectStreamer&>(getParser().getStreamer());
+  AttributeEmitter *AttrEmitter = new ObjectAttributeEmitter(O);
+  AttrEmitter->MaybeSwitchVendor("aeabi");
+
+  for (std::map<unsigned, StringRef>::iterator it = TextAttributeMap.begin(); it != TextAttributeMap.end(); ++it)
+    AttrEmitter->EmitTextAttribute(it->first, it->second);
+
+  for (std::map<unsigned, unsigned>::iterator it = AttributeMap.begin(); it != AttributeMap.end(); ++it)
+    AttrEmitter->EmitAttribute(it->first, it->second);
+
+  AttrEmitter->Finish();
+  delete AttrEmitter;
 }
 
 /// Force static initialization.

@@ -673,8 +673,10 @@ bool AsmParser::Run(bool NoInitialTextSection, bool NoFinalize) {
 
   // Finalize the output stream if there are no errors and if the client wants
   // us to.
-  if (!HadError && !NoFinalize)
+  if (!HadError && !NoFinalize) {
+    getTargetParser().finalizeParsing();
     Out.Finish();
+  }
 
   return HadError;
 }
