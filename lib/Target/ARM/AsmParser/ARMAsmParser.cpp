@@ -7963,22 +7963,25 @@ bool ARMAsmParser::parseDirectiveArch(SMLoc L) {
 bool ARMAsmParser::parseDirectiveEabiAttr(SMLoc L) {
   const AsmToken &Tok = Parser.getTok();
   if (Tok.isNot(AsmToken::Integer))
-    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
+    return Error(getLexer().getLoc(),
+                 "unexpected input in .eabi_attribute directive");
   unsigned attributeKey = Parser.getTok().getIntVal();
   // Eat the key.
   Parser.Lex();
   if (Parser.getTok().isNot(AsmToken::Comma))
-    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
+    return Error(getLexer().getLoc(),
+                 "unexpected input in .eabi_attribute directive");
   // Eat the comma.
   Parser.Lex();
   if (Parser.getTok().isNot(AsmToken::Integer))
-    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
+    return Error(getLexer().getLoc(),
+                 "unexpected input in .eabi_attribute directive");
   AttributeMap[attributeKey] = Parser.getTok().getIntVal();
   // Eat the value.
   Parser.Lex();
-  if (Parser.getTok().isNot(AsmToken::EndOfStatement)) {
-    return Error(getLexer().getLoc(), "unexpected input in .eabi_attribute directive");
-  }
+  if (Parser.getTok().isNot(AsmToken::EndOfStatement))
+    return Error(getLexer().getLoc(),
+                 "unexpected input in .eabi_attribute directive");
   return false;
 }
 
@@ -8209,18 +8212,21 @@ void ARMAsmParser::finalizeParsing() {
   if (AttributeMap.empty())
     return;
 
-  const MCSection *AttributeSection = reinterpret_cast<const MCSection*>(getParser().getContext().getELFSection(".ARM.attributes",
-                                                                                                                ELF::SHT_ARM_ATTRIBUTES,
-                                                                                                                0,
-                                                                                                                SectionKind::getMetadata()));
+  const MCSection *AttributeSection = reinterpret_cast<const MCSection *>(
+      getParser().getContext().getELFSection(".ARM.attributes",
+                                             ELF::SHT_ARM_ATTRIBUTES,
+                                             0,
+                                             SectionKind::getMetadata()));
   getParser().getStreamer().SwitchSection(AttributeSection);
   getParser().getStreamer().EmitIntValue(ARMBuildAttrs::Format_Version, 1);
 
-  MCObjectStreamer &O = static_cast<MCObjectStreamer&>(getParser().getStreamer());
+  MCObjectStreamer &O =
+      static_cast<MCObjectStreamer&>(getParser().getStreamer());
   AttributeEmitter *AttrEmitter = new ObjectAttributeEmitter(O);
   AttrEmitter->MaybeSwitchVendor("aeabi");
 
-  for (std::map<unsigned, unsigned>::iterator it = AttributeMap.begin(); it != AttributeMap.end(); ++it)
+  for (std::map<unsigned, unsigned>::iterator it = AttributeMap.begin();
+       it != AttributeMap.end(); ++it)
     AttrEmitter->EmitAttribute(it->first, it->second);
 
   AttrEmitter->Finish();
