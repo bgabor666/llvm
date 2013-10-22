@@ -74,6 +74,8 @@ class ARMAsmParser : public MCTargetAsmParser {
   // Map of register aliases registers via the .req directive.
   StringMap<unsigned> RegisterReqs;
 
+  bool nextSymbolIsThumb;
+
   struct {
     ARMCC::CondCodes Cond;    // Condition for IT block.
     unsigned Mask:4;          // Condition mask for instructions.
@@ -268,6 +270,8 @@ public:
 
     // Not in an ITBlock to start with.
     ITState.CurPosition = ~0U;
+
+    nextSymbolIsThumb = false;
   }
 
   // Implementation of the MCTargetAsmParser interface:
@@ -284,6 +288,8 @@ public:
                                SmallVectorImpl<MCParsedAsmOperand*> &Operands,
                                MCStreamer &Out, unsigned &ErrorInfo,
                                bool MatchingInlineAsm);
+  void onLabelParsed(MCSymbol *Symbol);
+
 };
 } // end anonymous namespace
 
@@ -7804,6 +7810,15 @@ bool ARMAsmParser::parseDirectiveARM(SMLoc L) {
   return false;
 }
 
+void ARMAsmParser::onLabelParsed(MCSymbol *Symbol)
+{
+    if (nextSymbolIsThumb) {
+        getParser().getStreamer().EmitThumbFunc(Symbol);
+
+        nextSymbolIsThumb = false;
+    }
+}
+
 /// parseDirectiveThumbFunc
 ///  ::= .thumbfunc symbol_name
 bool ARMAsmParser::parseDirectiveThumbFunc(SMLoc L) {
@@ -7827,6 +7842,8 @@ bool ARMAsmParser::parseDirectiveThumbFunc(SMLoc L) {
 
   if (getLexer().isNot(AsmToken::EndOfStatement))
     return Error(L, "unexpected token in directive");
+
+  nextSymbolIsThumb = true;
 
   // Eat the end of statement and any blank lines that follow.
   while (getLexer().is(AsmToken::EndOfStatement))
