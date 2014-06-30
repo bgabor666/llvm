@@ -90,7 +90,6 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
   bool NoCPU = CPU == "generic" || CPU.empty();
   std::string ARMArchFeature;
   switch (triple.getSubArch()) {
-  // default: llvm_unreachable("???");
   case Triple::v8:
     if (NoCPU)
       // v8a: FeatureDB, FeatureFPARMv8, FeatureNEON, FeatureDSPThumb2,
