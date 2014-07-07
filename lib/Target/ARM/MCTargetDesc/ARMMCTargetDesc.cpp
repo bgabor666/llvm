@@ -90,7 +90,7 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
   bool NoCPU = CPU == "generic" || CPU.empty();
   std::string ARMArchFeature;
   switch (triple.getSubArch()) {
-  case Triple::v8:
+  case Triple::ARMSubArch_v8:
     if (NoCPU)
       // v8a: FeatureDB, FeatureFPARMv8, FeatureNEON, FeatureDSPThumb2,
       //      FeatureMP, FeatureHWDiv, FeatureHWDivARM, FeatureTrustZone,
@@ -101,7 +101,7 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
       // Use CPU to figure out the exact features
       ARMArchFeature = "+v8";
     break;
-  case Triple::v7m:
+  case Triple::ARMSubArch_v7m:
     isThumb = true;
     if (NoCPU)
       // v7m: FeatureNoARM, FeatureDB, FeatureHWDiv, FeatureMClass
@@ -110,7 +110,7 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
       // Use CPU to figure out the exact features.
       ARMArchFeature = "+v7";
     break;
-  case Triple::v7em:
+  case Triple::ARMSubArch_v7em:
     if (NoCPU)
       // v7em: FeatureNoARM, FeatureDB, FeatureHWDiv, FeatureDSPThumb2,
       //       FeatureT2XtPk, FeatureMClass
@@ -119,7 +119,7 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
       // Use CPU to figure out the exact features.
       ARMArchFeature = "+v7";
     break;
-  case Triple::v7s:
+  case Triple::ARMSubArch_v7s:
     if (NoCPU)
       // v7s: FeatureNEON, FeatureDB, FeatureDSPThumb2, FeatureHasRAS
       //      Swift
@@ -128,7 +128,7 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
       // Use CPU to figure out the exact features.
       ARMArchFeature = "+v7";
     break;
-  case Triple::v7:
+  case Triple::ARMSubArch_v7:
     // v7 CPUs have lots of different feature sets. If no CPU is specified,
     // then assume v7a (e.g. cortex-a8) feature set. Otherwise, return
     // the "minimum" feature set and use CPU string to figure out the exact
@@ -140,10 +140,10 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
       // Use CPU to figure out the exact features.
       ARMArchFeature = "+v7";
     break;
-  case Triple::v6t2:
+  case Triple::ARMSubArch_v6t2:
     ARMArchFeature = "+v6t2";
     break;
-  case Triple::v6m:
+  case Triple::ARMSubArch_v6m:
     isThumb = true;
     if (NoCPU)
       // v6m: FeatureNoARM, FeatureMClass
@@ -151,17 +151,21 @@ std::string ARM_MC::ParseARMTriple(StringRef TT, StringRef CPU) {
     else
       ARMArchFeature = "+v6";
     break;
-  case Triple::v6:
+  case Triple::ARMSubArch_v6:
     ARMArchFeature = "+v6";
     break;
-  case Triple::v5te:
+  case Triple::ARMSubArch_v5te:
     ARMArchFeature = "+v5te";
     break;
-  case Triple::v5:
+  case Triple::ARMSubArch_v5:
     ARMArchFeature = "+v5t";
     break;
-  case Triple::v4t:
+  case Triple::ARMSubArch_v4t:
     ARMArchFeature = "+v4t";
+    break;
+  case Triple::NoSubArch:
+  case Triple::ARMSubArch_v4:
+    ARMArchFeature = "+v4";
     break;
   }
 

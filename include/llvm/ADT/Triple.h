@@ -81,17 +81,18 @@ public:
   enum SubArchType {
     NoSubArch,
 
-    v8,
-    v7,
-    v7em,
-    v7m,
-    v7s,
-    v6,
-    v6m,
-    v6t2,
-    v5,
-    v5te,
-    v4t
+    ARMSubArch_v8,
+    ARMSubArch_v7,
+    ARMSubArch_v7em,
+    ARMSubArch_v7m,
+    ARMSubArch_v7s,
+    ARMSubArch_v6,
+    ARMSubArch_v6m,
+    ARMSubArch_v6t2,
+    ARMSubArch_v5,
+    ARMSubArch_v5te,
+    ARMSubArch_v4t,
+    ARMSubArch_v4
   };
   enum VendorType {
     UnknownVendor,
